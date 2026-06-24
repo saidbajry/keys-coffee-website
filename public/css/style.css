@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #2a170f;
+  --color-soft: #f5f1ec;
+  --color-gold: #b98b5f;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: serif;
+    background-color: #f5f1ec;
+    color: #1f1f1f;
+  }
+}
+
+@layer utilities {
+  .nav-link {
+    position: relative;
+    transition: 0.3s ease;
+  }
+
+  .nav-link::after {
+    content: '';
+    position: absolute;
+    width: 0;
+    height: 2px;
+    left: 0;
+    bottom: -5px;
+    background-color: #b98b5f;
+    transition: 0.4s ease;
+  }
+
+  .nav-link:hover {
+    color: #b98b5f;
+  }
+
+  .nav-link:hover::after {
+    width: 100%;
+  }
+
+  .hero-overlay {
+    background: linear-gradient(to right, rgba(255,255,255,0.95), rgba(255,255,255,0.2));
+  }
+
+  .product-card {
+    transition: 0.4s ease;
+  }
+
+  .product-card:hover {
+    transform: translateY(-10px);
+  }
+
+  .chat-box {
+    height: 400px;
+    overflow-y: auto;
+  }
+
+  .chat-message {
+    margin-bottom: 15px;
+  }
+}

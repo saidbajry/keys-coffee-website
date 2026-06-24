@@ -1,0 +1,29 @@
+{
+  "name": "keys-coffee",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run tailwind\" \"npm run server\"",
+    "server": "nodemon server.js",
+    "tailwind": "npx @tailwindcss/cli -i ./public/css/style.css -o ./public/css/output.css --watch"
+  },
+  "dependencies": {
+    "@google/genai": "^2.8.0",
+    "dotenv": "^17.4.2",
+    "ejs": "^3.1.10",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-session": "^1.19.0",
+    "midtrans-client": "^1.4.3",
+    "multer": "^2.1.1",
+    "mysql2": "^3.22.5",
+    "openai": "^6.44.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "autoprefixer": "^10.4.20",
+    "nodemon": "^3.1.0",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^4.0.0"
+  }
+}

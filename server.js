@@ -1,4 +1,3 @@
-const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
@@ -6,13 +5,8 @@ const multer = require('multer');
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 const ExcelJS = require('exceljs');
-app.get('/', (req, res) => {
-    res.send('Server Toko Kopi Berhasil Jalan Online!');
-});
-module.exports = express();
 
 const app = express();
-const PORT = 3000;
 
 require('dotenv').config();
 
@@ -23,21 +17,23 @@ const ai = new OpenAI({
     baseURL: "https://openrouter.ai/api/v1",
 });
 
-// --- INTEGRASI SATU DATABASE KONEKSI (PROMISE POOL) ---
+// --- INTEGRASI DATABASE (MENDUKUNG CLOUD AIVEN VERCEL & LOCALHOST) ---
 const db = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: '',
-    database: 'keys_coffee',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'keys_coffee',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false
 });
 
-// Tes Koneksi Database Aman (Menggunakan gaya .then agar terhindar dari top-level await)
+// Tes Koneksi Database
 db.getConnection()
     .then(connection => {
-        console.log('Sukses terhubung ke database fisik MySQL (keys_coffee) via Promise Pool!');
+        console.log('Sukses terhubung ke database via Promise Pool!');
         connection.release();
     })
     .catch(err => {
@@ -47,7 +43,7 @@ db.getConnection()
 // --- KONFIGURASI MULTER (UPLOAD GAMBAR) ---
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = './public/uploads/';
+        const dir = '/tmp/uploads/'; // Menggunakan /tmp/ karena sistem serverless Vercel bersifat Read-Only
         if (!fs.existsSync(dir)) {
             fs.mkdirSync(dir, { recursive: true });
         }
@@ -256,7 +252,6 @@ app.post('/api/checkout', async (req, res) => {
     const customerName = req.session.customerName || 'Pelanggan Guest';
 
     try {
-        // 1. Pembersihan angka total harga murni
         let nominalMurni = 0;
         if (totalPrice !== undefined && totalPrice !== null) {
             nominalMurni = typeof totalPrice === 'string'
@@ -265,21 +260,12 @@ app.post('/api/checkout', async (req, res) => {
         }
         if (isNaN(nominalMurni)) nominalMurni = 0;
 
-        // 2. Kueri Aman: Hapus id_user dari list insert agar tidak memicu Foreign Key Constraint Error di MySQL
-        // Kolom status_pembayaran kita bungkus dengan COALESCE/IFNULL atau kita abaikan jika belum ada, 
-        // tapi di sini kita masukkan versi aman yang hanya mengisi customer_name dan total_price terlebih dahulu.
-
-        let insertOrderQuery = 'INSERT INTO orders (customer_name, total_price) VALUES (?, ?)';
-        let queryParams = [customerName, nominalMurni];
-
-        // TIPS: Jika lu sudah tambah kolom status_pembayaran di phpMyAdmin, gunakan baris di bawah ini:
-        insertOrderQuery = 'INSERT INTO orders (customer_name, total_price, status_pembayaran) VALUES (?, ?, ?)';
-        queryParams = [customerName, nominalMurni, 'success'];
+        let insertOrderQuery = 'INSERT INTO orders (customer_name, total_price, status_pembayaran) VALUES (?, ?, ?)';
+        let queryParams = [customerName, nominalMurni, 'success'];
 
         const [orderResult] = await db.query(insertOrderQuery, queryParams);
         const newOrderId = orderResult.insertId;
 
-        // 3. Simpan detail ke tabel order_items
         const insertItemQuery = 'INSERT INTO order_items (id_order, product_name, qty, price) VALUES (?, ?, ?, ?)';
 
         for (const item of items) {
@@ -299,7 +285,6 @@ app.post('/api/checkout', async (req, res) => {
             ]);
         }
 
-        // 4. Bangun teks nota WhatsApp
         let textWhatsApp = `Hello Key's Coffee ☕%0A%0ASaya ingin membeli (Order ID: #${newOrderId}):%0A`;
 
         items.forEach(item => {
@@ -314,14 +299,12 @@ app.post('/api/checkout', async (req, res) => {
 
         textWhatsApp += `%0ATotal Pembayaran: *Rp ${nominalMurni.toLocaleString('id-ID')}*%0A%0APesan saya sudah tercatat di database sistem. Mohon diproses!`;
 
-        // 5. Kirim balik respon sukses JSON utuh
         return res.json({
             success: true,
             whatsAppUrl: `https://wa.me/6285952867098?text=${textWhatsApp}`
         });
 
     } catch (err) {
-        // Menampilkan pesan error asli di terminal VS Code biar lu bisa baca letak gagal kuerinya di mana
         console.error('⚠️ DETAIL EROR DATABASE ASLI:', err.message);
         return res.status(500).json({ success: false, error: err.message });
     }
@@ -382,81 +365,41 @@ app.post('/api/contact', async (req, res) => {
 
 // API: Chatbot Gemini Real-Time DB
 app.post('/api/chat', async (req, res) => {
-
     const { message } = req.body;
 
     if (!message) {
-        return res.status(400).json({
-            reply: "Pesan kosong"
-        });
+        return res.status(400).json({ reply: "Pesan kosong" });
     }
 
     try {
+        const [products] = await db.query('SELECT name, price, description FROM products');
+        const daftarMenu = products.map(p => `${p.name} - ${p.price} - ${p.description}`).join('\n');
 
-        const [products] = await db.query(
-            'SELECT name, price, description FROM products'
-        );
-
-        const daftarMenu = products.map(p =>
-            `${p.name} - ${p.price} - ${p.description}`
-        ).join('\n');
-
-        console.log("OPENROUTER KEY:",
-            process.env.OPENROUTER_API_KEY ? "ADA" : "TIDAK ADA"
-        );
-
-        console.log("CHAT MASUK:", message);
         const completion = await ai.chat.completions.create({
             model: "google/gemma-4-26b-a4b-it:free",
-
             messages: [
                 {
                     role: "system",
-                    content: `
-Kamu adalah Key's AI Coffee.
-
-Jawab hanya seputar menu Key's Coffee,
-kopi, makanan, minuman, promo,
-dan layanan toko.
-
-Daftar Menu:
-
-${daftarMenu}
-`
+                    content: `Kamu adalah Key's AI Coffee.\n\nJawab hanya seputar menu Key's Coffee, kopi, makanan, minuman, promo, dan layanan toko.\n\nDaftar Menu:\n\n${daftarMenu}`
                 },
                 {
                     role: "user",
                     content: message
                 }
             ],
-
             temperature: 0.7,
             max_tokens: 300
-
         });
 
-        const reply =
-            completion?.choices?.[0]?.message?.content ||
-            "Maaf, saya tidak dapat memberikan jawaban saat ini.";
-
-        res.json({
-            reply
-        });
+        const reply = completion?.choices?.[0]?.message?.content || "Maaf, saya tidak dapat memberikan jawaban saat ini.";
+        res.json({ reply });
 
     } catch (error) {
-
-        console.error("OPENROUTER ERROR:");
-        console.error(error);
-
+        console.error("OPENROUTER ERROR:", error);
         res.status(500).json({
-            reply:
-                error?.error?.message ||
-                error?.message ||
-                "AI sedang mengalami gangguan."
+            reply: error?.error?.message || error?.message || "AI sedang mengalami gangguan."
         });
-
     }
-
 });
 
 // Logout
@@ -467,50 +410,23 @@ app.get('/logout', (req, res) => {
 
 app.get("/models", async (req, res) => {
     try {
-
-        const response = await fetch(
-            "https://openrouter.ai/api/v1/models"
-        );
-
+        const response = await fetch("https://openrouter.ai/api/v1/models");
         const data = await response.json();
-
-        const freeModels = data.data
-            .filter(model => model.id.includes(":free"))
-            .map(model => model.id);
-
+        const freeModels = data.data.filter(model => model.id.includes(":free")).map(model => model.id);
         res.json(freeModels);
-
-    } catch (err) {
-
-        console.error(err);
-        res.status(500).send(err.message);
-
-    }
-});
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
-
-app.get("/models", async (req, res) => {
-    try {
-
-        const response = await fetch(
-            "https://openrouter.ai/api/v1/models"
-        );
-
-        const data = await response.json();
-
-        const freeModels = data.data
-            .filter(model =>
-                model.id.includes(":free")
-            )
-            .map(model => model.id);
-
-        res.json(freeModels);
-
     } catch (err) {
         console.error(err);
         res.status(500).send(err.message);
     }
 });
+
+// RUNNING SERVER: app.listen hanya dipanggil jika berjalan di localhost (bukan Vercel Production)
+if (process.env.NODE_ENV !== 'production') {
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running locally on http://localhost:${PORT}`);
+    });
+}
+
+// WAJIB DI-EXPORT: Diperlukan agar vercel.json dapat memetakan handler serverless dengan benar
+module.exports = app;

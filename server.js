@@ -420,13 +420,32 @@ app.get("/models", async (req, res) => {
     }
 });
 
-// RUNNING SERVER: app.listen hanya dipanggil jika berjalan di localhost (bukan Vercel Production)
-if (process.env.NODE_ENV !== 'production') {
-    const PORT = process.env.PORT || 3000;
-    app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server running locally on http://localhost:${PORT}`);
-    });
-}
+// // RUNNING SERVER: app.listen hanya dipanggil jika berjalan di localhost (bukan Vercel Production)
+// if (process.env.NODE_ENV !== 'production') {
+//     const PORT = process.env.PORT || 3000;
+//     app.listen(PORT, '0.0.0.0', () => {
+//         console.log(`Server running locally on http://localhost:${PORT}`);
+//     });
+// }
+
+// Rute khusus untuk cek isi tabel products di database
+app.get('/api/cek-produk', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM products');
+        res.json({
+            success: true,
+            total_data: rows.length,
+            data: rows
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            success: false,
+            message: "Gagal mengambil data dari database",
+            error: error.message
+        });
+    }
+});
 
 // WAJIB DI-EXPORT: Diperlukan agar vercel.json dapat memetakan handler serverless dengan benar
 module.exports = app;

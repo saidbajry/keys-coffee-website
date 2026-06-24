@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
@@ -5,6 +6,9 @@ const multer = require('multer');
 const fs = require('fs');
 const mysql = require('mysql2/promise');
 const ExcelJS = require('exceljs');
+app.get('/', (req, res) => {
+    res.send('Server Toko Kopi Berhasil Jalan Online!');
+});
 module.exports = express();
 
 const app = express();

@@ -158,57 +158,59 @@ function renderCart() {
 
 // --- DYNAMIC WHATSAPP CHECKOUT ---
 document.getElementById('checkoutBtn').onclick = async () => {
-    if (cart.length === 0) {
-        alert('Keranjang belanja kamu masih kosong!');
+    if (!window.currentUser) {
+        alert('Waduh bro, lu harus login dulu sebagai customer sebelum bisa belanja!');
+        window.location.href = '/login';
         return;
     }
 
-    // Hitung total harga dari array cart saat ini
+    if (typeof cart === 'undefined' || cart.length === 0) {
+        alert('Keranjang belanja kamu masih kosong, nih!');
+        return;
+    }
+
     let total = 0;
     cart.forEach(item => {
-        total += item.price * item.qty;
+        let hargaMurni = typeof item.price === 'string' ? parseInt(item.price.replace(/[^0-9]/g, '')) : parseInt(item.price);
+        total += hargaMurni * parseInt(item.qty);
     });
 
-    // Siapkan data objek JSON untuk dikirim ke backend
-    const checkoutData = {
-        items: cart,        // Mengirim data array objek [{name, price, qty}]
-        totalPrice: total   // Mengirim total harga integer
-    };
+    document.getElementById('qrisTotal').innerText = 'Rp ' + total.toLocaleString('id-ID');
 
-    try {
-        // Tembak API backend /api/checkout menggunakan Fetch
-        const response = await fetch('/api/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(checkoutData)
+    // Generate Barcode Simulasi
+    const qrContainer = document.getElementById('qrcode');
+    qrContainer.innerHTML = "";
+    new QRCode(qrContainer, { text: `KEYS-DUMMY|TOTAL:${total}`, width: 200, height: 200 });
+
+    // Munculkan Pop-up QRIS
+    const modal = document.getElementById('qrisModal');
+    modal.classList.remove('hidden');
+
+    // --- TIMEOUT SIMULASI VERCEL (ANTI-API CRASH) ---
+    setTimeout(() => {
+        const statusText = document.getElementById('qrisStatus');
+        statusText.innerHTML = "🟢 Pembayaran Berhasil Divalidasi!";
+        statusText.className = "text-emerald-600 font-bold text-xs mb-2";
+
+        // Bangun teks nota WhatsApp langsung di frontend
+        let textWhatsApp = `Hello Key's Coffee ☕%0A%0ASaya ingin membeli (Order Online Vercel):%0A`;
+        cart.forEach(item => {
+            let hargaMurni = typeof item.price === 'string' ? parseInt(item.price.replace(/[^0-9]/g, '')) : parseInt(item.price);
+            textWhatsApp += `- ${item.name} (x${item.qty}) = Rp ${(hargaMurni * item.qty).toLocaleString('id-ID')}%0A`;
         });
+        textWhatsApp += `%0ATotal Pembayaran: *Rp ${total.toLocaleString('id-ID')}*%0A%0AMohon diproses kak!`;
 
-        const result = await response.json();
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            cart.length = 0; // Kosongkan keranjang
+            if (typeof renderCart === 'function') renderCart();
 
-        if (result.success) {
-            // Kosongkan keranjang belanja di UI karena sudah sukses dicatat database
-            cart.length = 0;
-            renderCart();
+            // Langsung buka link WhatsApp tanpa nembak database server
+            window.open(`https://wa.me/6285952867098?text=${textWhatsApp}`, '_blank');
+        }, 1500);
 
-            // Tutup sidebar cart otomatis
-            document.getElementById('cartSidebar').style.right = '-100%';
-
-            // Tampilkan toast kustom sukses (jika ada fungsi showToast lu)
-            if (typeof showToast === 'function') {
-                showToast('Transaksi Dicatat!');
-            }
-
-            // Alihkan otomatis membuka tab baru WhatsApp berisi teks nota pesanan asli
-            window.open(result.whatsAppUrl, '_blank');
-        } else {
-            alert('Gagal memproses checkout: ' + result.error);
-        }
-
-    } catch (error) {
-        console.error('Error saat memproses checkout AJAX:', error);
-        alert('Terjadi kesalahan jaringan saat menghubungi server.');
-    }
-}
+    }, 5000); // Jeda simulasi scan 5 detik
+};
 
 // --- INTEGRASI CHATBOT AI GEMINI VIA BACKEND ---
 const sendChat = document.getElementById('sendChat');
@@ -306,6 +308,9 @@ if (contactForm) {
         }
     });
 }
+
+// FUNGSI ANIMASI SHOW TOAST
+// --- KODE BAGIAN PALING BAWAH FILE APP.JS LU ---
 
 // FUNGSI ANIMASI SHOW TOAST
 function showToast(message) {

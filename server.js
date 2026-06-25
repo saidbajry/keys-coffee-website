@@ -5,7 +5,7 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// --- DATA DUMMY SERVERLESS VERCEL (PENGGANTI DATABASE) ---
+// --- DATA DUMMY LOKAL (Bypass Database MySQL) ---
 const dummyProducts = [
     { id: 1, name: "Espresso Klasik", price: "Rp 18.000", description: "Kopi hitam pekat murni mantap.", img: "/images/product-1.png" },
     { id: 2, name: "Aren Latte", price: "Rp 22.000", description: "Perpaduan kopi espresso premium dan gula aren murni.", img: "/images/product-2.png" },
@@ -25,7 +25,7 @@ const dummyOrders = [
     { id_order: 102, customer_name: "Siti Aminah", detail_items: "Espresso Klasik (x1)", total_price: 18000, status_pembayaran: "success", created_at: new Date() }
 ];
 
-// --- MIDDLEWARES SETTINGS ---
+// --- MIDDLEWARES CONFIGURATION ---
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -34,12 +34,12 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 app.use(session({
-    secret: 'keys-coffee-vercel-dummy-secret',
+    secret: 'keys-coffee-vercel-secret-key',
     resave: false,
     saveUninitialized: true
 }));
 
-// Middleware Proteksi Admin
+// Middleware Proteksi Admin Simulasi
 function checkAdmin(req, res, next) {
     if (req.session.isAdmin) {
         next();
@@ -48,7 +48,7 @@ function checkAdmin(req, res, next) {
     }
 }
 
-// --- ROUTES MANAGEMENT ---
+// --- MANAGEMENT ROUTES ---
 
 // Beranda Utama
 app.get('/', (req, res) => {
@@ -58,7 +58,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// Login Portal (Bypass password demi kelancaran demo portofolio Vercel)
+// Login Portal
 app.get('/login', (req, res) => {
     res.render('login', { error: null });
 });
@@ -76,21 +76,15 @@ app.post('/login', (req, res) => {
     }
 });
 
-// Dashboard Admin Portal (Oper seluruh data dummy lengkap biar EJS tidak crash)
+// Dashboard Admin (PASTIKAN SEMUA VARIABEL INI DI-OPER!)
 app.get('/admin', checkAdmin, (req, res) => {
     res.render('admin', {
         products: dummyProducts,
-        users: [],         // Harus ada biar users.length di admin.ejs gak error!
-        messages: [],      // Harus ada biar messages.length di admin.ejs gak error!
-        chartData: dummyChartData,
-        orders: dummyOrders
+        users: [],         // Agar users.length di admin.ejs tidak crash
+        messages: [],      // Agar messages.length di admin.ejs tidak crash
+        chartData: dummyChartData, // Data grafik batang kuartal
+        orders: dummyOrders        // Data tabel riwayat transaksi
     });
-});
-
-// Simulasi Chatbot AI statis di Vercel (Biar gak kena limit API Key)
-app.post('/api/chat', (req, res) => {
-    const { message } = req.body;
-    res.json({ reply: `Halo! Terima kasih sudah mampir ke website demo Key's Coffee. Kamu tadi bilang: "${message}". Kopi racikan terbaik kami siap menemani harimu!` });
 });
 
 // Logout
@@ -99,7 +93,7 @@ app.get('/logout', (req, res) => {
     res.redirect('/');
 });
 
-// Handler Listen Port lokal
+// Handler Server Listen Port
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
